@@ -1,0 +1,273 @@
+/*
+ * CallbackNode — dispatches every Journey callback to its dedicated Composable.
+ *
+ * INSTRUCTIONS:
+ *   1. Place in com/example/myapp/auth/callback/CallbackNode.kt
+ *   2. For callbacks that require optional modules, add the relevant Gradle dependency
+ *      (see SKILL.md Prerequisites).
+ *   3. Add more `is XCallback ->` branches as your Journey trees require.
+ */
+
+package com.example.myapp.auth.callback
+
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+
+// ── Core Journey callbacks ─────────────────────────────────────────────────────
+import com.pingidentity.journey.callback.BooleanAttributeInputCallback
+import com.pingidentity.journey.callback.ChoiceCallback
+import com.pingidentity.journey.callback.ConfirmationCallback
+import com.pingidentity.journey.callback.ConsentMappingCallback
+import com.pingidentity.journey.callback.KbaCreateCallback
+import com.pingidentity.journey.callback.NameCallback
+import com.pingidentity.journey.callback.NumberAttributeInputCallback
+import com.pingidentity.journey.callback.PasswordCallback
+import com.pingidentity.journey.callback.PollingWaitCallback
+import com.pingidentity.journey.callback.StringAttributeInputCallback
+import com.pingidentity.journey.callback.SuspendedTextOutputCallback
+import com.pingidentity.journey.callback.TermsAndConditionsCallback
+import com.pingidentity.journey.callback.TextInputCallback
+import com.pingidentity.journey.callback.TextOutputCallback
+import com.pingidentity.journey.callback.ValidatedPasswordCallback
+import com.pingidentity.journey.callback.ValidatedUsernameCallback
+import com.pingidentity.journey.plugin.callbacks
+import com.pingidentity.journey.plugin.description
+import com.pingidentity.journey.plugin.header
+import com.pingidentity.journey.plugin.pageFooter
+import com.pingidentity.journey.plugin.submitButtonText
+import com.pingidentity.orchestrate.ContinueNode
+
+// ── Optional module callbacks ──────────────────────────────────────────────────
+// Uncomment each group when the corresponding Gradle dependency is added.
+
+// :foundation:device:device-profile
+import com.pingidentity.device.profile.DeviceProfileCallback
+
+// :recaptcha-enterprise
+import com.pingidentity.recaptcha.enterprise.ReCaptchaEnterpriseCallback
+
+// :external-idp
+import com.pingidentity.idp.journey.IdpCallback
+import com.pingidentity.idp.journey.SelectIdpCallback
+
+// :protect
+import com.pingidentity.protect.journey.PingOneProtectEvaluationCallback
+import com.pingidentity.protect.journey.PingOneProtectInitializeCallback
+
+// :mfa:fido
+import com.pingidentity.fido.journey.FidoAuthenticationCallback
+import com.pingidentity.fido.journey.FidoRegistrationCallback
+
+// :mfa:binding
+import com.pingidentity.device.binding.journey.DeviceBindingCallback
+import com.pingidentity.device.binding.journey.DeviceSigningVerifierCallback
+
+/**
+ * Renders all callbacks contained in [continueNode].
+ *
+ * @param continueNode   The current Journey step.
+ * @param onNodeUpdated  Called when a callback value changes (triggers recomposition).
+ * @param onNext         Called to advance to the next Journey node.
+ */
+@Composable
+fun CallbackNode(
+    continueNode: ContinueNode,
+    onNodeUpdated: () -> Unit,
+    onNext: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .padding(4.dp)
+            .fillMaxWidth(),
+    ) {
+
+        // ── Optional stage header ─────────────────────────────────────────────
+        if (continueNode.header.isNotEmpty()) {
+            Text(
+                text = continueNode.header,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+            )
+        }
+
+        // ── Optional stage description ────────────────────────────────────────
+        if (continueNode.description.isNotEmpty()) {
+            Text(
+                text = continueNode.description,
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+            )
+        }
+
+        // ── Callback rendering ────────────────────────────────────────────────
+        var showNext = true
+
+        continueNode.callbacks.forEach { callback ->
+            when (callback) {
+
+                // ── Core callbacks (journey module) ───────────────────────────
+
+                is NameCallback ->
+                    NameCallbackField(callback, onNodeUpdated)
+
+                is PasswordCallback ->
+                    PasswordCallbackField(callback, onNodeUpdated)
+
+                is ValidatedUsernameCallback ->
+                    ValidatedUsernameCallbackField(callback, onNodeUpdated)
+
+                is ValidatedPasswordCallback ->
+                    ValidatedPasswordCallbackField(callback, onNodeUpdated)
+
+                is TextInputCallback ->
+                    TextInputCallbackField(callback, onNodeUpdated)
+
+                is TextOutputCallback ->
+                    TextOutputCallbackField(callback)
+
+                is SuspendedTextOutputCallback -> {
+                    // Journey is suspended server-side (magic link). Show message, no Next button.
+                    SuspendedTextOutputCallbackField(callback)
+                    showNext = false
+                }
+
+                is ChoiceCallback ->
+                    ChoiceCallbackField(callback, onNodeUpdated)
+
+                is ConfirmationCallback -> {
+                    showNext = false   // Confirmation renders its own action buttons
+                    ConfirmationCallbackField(callback, onNext)
+                }
+
+                is BooleanAttributeInputCallback ->
+                    BooleanAttributeInputCallbackField(callback, onNodeUpdated)
+
+                is NumberAttributeInputCallback ->
+                    NumberAttributeInputCallbackField(callback, onNodeUpdated)
+
+                is StringAttributeInputCallback ->
+                    StringAttributeInputCallbackField(callback, onNodeUpdated)
+
+                is TermsAndConditionsCallback ->
+                    TermsAndConditionsCallbackField(callback, onNodeUpdated)
+
+                is ConsentMappingCallback ->
+                    ConsentMappingCallbackField(callback, onNodeUpdated)
+
+                is KbaCreateCallback ->
+                    KbaCreateCallbackField(callback, onNodeUpdated)
+
+                is PollingWaitCallback ->
+                    // Auto-advances via LaunchedEffect; no Next button needed
+                    PollingWaitCallbackField(callback, onNext)
+
+                // ── Device Profile (:foundation:device:device-profile) ────────
+                is DeviceProfileCallback -> {
+                    showNext = false
+                    DeviceProfileCallbackField(callback, onNext)
+                }
+
+                // ── ReCaptcha Enterprise (:recaptcha-enterprise) ──────────────
+                is ReCaptchaEnterpriseCallback -> {
+                    showNext = false
+                    ReCaptchaEnterpriseCallbackField(callback, onNext)
+                }
+
+                // ── External IdP (:external-idp) ──────────────────────────────
+                is SelectIdpCallback ->
+                    SelectIdpCallbackField(callback, onNext)
+
+                is IdpCallback -> {
+                    showNext = false
+                    IdpCallbackField(callback, onNext)
+                }
+
+                // ── PingOne Protect (:protect) ────────────────────────────────
+                is PingOneProtectInitializeCallback -> {
+                    showNext = false
+                    PingOneProtectInitializeField(callback, onNext)
+                }
+
+                is PingOneProtectEvaluationCallback -> {
+                    showNext = false
+                    PingOneProtectEvaluationField(callback, onNext)
+                }
+
+                // ── FIDO2 / WebAuthn (:mfa:fido) ──────────────────────────────
+                is FidoRegistrationCallback -> {
+                    showNext = false
+                    FidoRegistrationField(callback, onNext)
+                }
+
+                is FidoAuthenticationCallback -> {
+                    showNext = false
+                    FidoAuthenticationField(callback, onNext)
+                }
+
+                // ── Device Binding (:mfa:binding) ─────────────────────────────
+                is DeviceBindingCallback -> {
+                    // Requires its own ViewModel to coordinate PIN collection dialogs
+                    showNext = false
+                    val vm: DeviceBindingCallbackViewModel =
+                        viewModel(factory = DeviceBindingCallbackViewModel.factory(callback))
+                    DeviceBindingCallbackField(vm, onNext)
+                }
+
+                is DeviceSigningVerifierCallback -> {
+                    // Requires its own ViewModel for PIN + UserKey selection dialogs
+                    showNext = false
+                    val vm: DeviceSigningVerifierCallbackViewModel =
+                        viewModel(factory = DeviceSigningVerifierCallbackViewModel.factory(callback))
+                    DeviceSigningVerifierCallbackField(vm, showChallenge = true, onNext)
+                }
+
+                else -> {
+                    // Unknown callback — skip rendering.
+                    // Log.w("CallbackNode", "Unhandled callback: ${callback::class.simpleName}")
+                }
+            }
+        }
+
+        // ── Optional page footer ──────────────────────────────────────────────
+        if (continueNode.pageFooter.isNotEmpty()) {
+            Text(
+                text = continueNode.pageFooter,
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp, bottom = 8.dp),
+            )
+        }
+
+        // ── Next / Submit button ──────────────────────────────────────────────
+        if (showNext) {
+            val buttonLabel = continueNode.submitButtonText.ifEmpty { "Next" }
+            Button(
+                modifier = Modifier.align(Alignment.End),
+                onClick = onNext,
+            ) {
+                Text(buttonLabel)
+            }
+        }
+    }
+}
+

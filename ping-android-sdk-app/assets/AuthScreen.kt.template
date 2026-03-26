@@ -1,0 +1,149 @@
+/*
+ * Auth Screen — root Composable that renders the current Journey node.
+ *
+ * INSTRUCTIONS:
+ *   1. Place in com/example/myapp/auth/AuthScreen.kt
+ *   2. Call from your NavHost when navigating to the auth destination.
+ *   3. Provide an `onSuccess` lambda to navigate away after authentication.
+ */
+
+package com.example.myapp.auth
+
+import android.util.Log
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.pingidentity.orchestrate.ContinueNode
+import com.pingidentity.orchestrate.ErrorNode
+import com.pingidentity.orchestrate.FailureNode
+import com.pingidentity.orchestrate.SuccessNode
+import com.example.myapp.auth.callback.CallbackNode
+
+/**
+ * Stateful wrapper — obtains [AuthViewModel] and delegates to the stateless overload.
+ *
+ * @param journeyName  Name of the Journey tree configured in PingOne AIC.
+ * @param onSuccess    Called once when authentication succeeds (navigate away here).
+ */
+@Composable
+fun AuthScreen(
+    journeyName: String,
+    onSuccess: () -> Unit,
+) {
+    val viewModel: AuthViewModel = viewModel(
+        factory = AuthViewModel.factory(journeyName)
+    )
+    AuthScreen(viewModel = viewModel, onSuccess = onSuccess)
+}
+
+/**
+ * Stateless overload — suitable for preview or when the ViewModel is supplied externally.
+ */
+@Composable
+fun AuthScreen(
+    viewModel: AuthViewModel,
+    onSuccess: () -> Unit,
+) {
+    // Restart the journey when the user presses Back instead of exiting
+    BackHandler { viewModel.start() }
+
+    val state by viewModel.state.collectAsState()
+    val loading by viewModel.loading.collectAsState()
+    val currentOnSuccess by rememberUpdatedState(onSuccess)
+
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        if (loading) {
+            CircularProgressIndicator()
+        }
+
+        Column(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxSize(),
+        ) {
+            when (val node = state.node) {
+
+                is ContinueNode -> {
+                    CallbackNode(
+                        continueNode = node,
+                        onNodeUpdated = { viewModel.refresh() },
+                        onNext = { viewModel.next(node) },
+                    )
+                }
+
+                is FailureNode -> {
+                    Log.e("AuthScreen", "Journey failure", node.cause)
+                    ErrorCard(message = node.cause.message ?: "An unexpected error occurred.")
+                }
+
+                is ErrorNode -> {
+                    ErrorCard(message = node.message)
+                }
+
+                is SuccessNode -> {
+                    LaunchedEffect(true) {
+                        currentOnSuccess()
+                    }
+                }
+
+                null -> {
+                    /* Initial state — loading indicator already shown above */
+                }
+            }
+        }
+    }
+}
+
+// ── Error Card ────────────────────────────────────────────────────────────────
+
+@Composable
+private fun ErrorCard(message: String) {
+    Card(
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp),
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
+        ) {
+            Icon(Icons.Filled.Error, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = message,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
+}
+

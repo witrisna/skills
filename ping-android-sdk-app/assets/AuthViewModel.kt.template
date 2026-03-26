@@ -1,0 +1,101 @@
+/*
+ * Auth ViewModel — orchestrates the Journey authentication flow.
+ *
+ * INSTRUCTIONS:
+ *   1. Place in com/example/myapp/auth/AuthViewModel.kt
+ *   2. Ensure `journey` (from JourneyConfig.kt) is accessible in this package.
+ *   3. Pass the journey name (tree name configured in AIC) via the factory.
+ */
+
+package com.example.myapp.auth
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.pingidentity.journey.start
+import com.pingidentity.journey.user
+import com.pingidentity.orchestrate.ContinueNode
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+class AuthViewModel(private val journeyName: String) : ViewModel() {
+
+    /** Holds the current authentication node and a recomposition counter. */
+    var state = MutableStateFlow(AuthState())
+        private set
+
+    /** True while an async Journey operation is in progress. */
+    var loading = MutableStateFlow(false)
+        private set
+
+    init {
+        // Auto-start the journey when the ViewModel is created.
+        start()
+    }
+
+    /**
+     * (Re-)starts the Journey from the beginning.
+     * Called on init and when the user presses Back.
+     */
+    fun start() {
+        loading.update { true }
+        viewModelScope.launch {
+            val node = journey.start(journeyName)
+            state.update { it.copy(node = node) }
+            loading.update { false }
+        }
+    }
+
+    /**
+     * Advances to the next node by submitting the current [ContinueNode]'s callbacks.
+     * Callbacks must have been populated (e.g., name/password set) before calling this.
+     */
+    fun next(node: ContinueNode) {
+        loading.update { true }
+        viewModelScope.launch {
+            val next = node.next()
+            state.update { it.copy(node = next) }
+            loading.update { false }
+        }
+    }
+
+    /**
+     * Triggers a recomposition of the current node without advancing the journey.
+     * Useful when a callback value changes but the node reference stays the same.
+     */
+    fun refresh() {
+        state.update { it.copy(counter = it.counter + 1) }
+    }
+
+    /**
+     * Logs out the current user (revokes tokens + clears session).
+     *
+     * @param onCompleted Callback invoked after logout (on the calling thread).
+     */
+    fun logout(onCompleted: () -> Unit) {
+        viewModelScope.launch {
+            journey.user()?.logout()
+        }
+        onCompleted()
+    }
+
+    // ── Factory ──────────────────────────────────────────────────────────────
+
+    companion object {
+        /**
+         * Creates a [ViewModelProvider.Factory] that supplies an [AuthViewModel]
+         * for the given [journeyName].
+         *
+         * Usage in a Composable:
+         *   val vm: AuthViewModel = viewModel(factory = AuthViewModel.factory("Login"))
+         */
+        fun factory(journeyName: String): ViewModelProvider.Factory =
+            object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(modelClass: Class<T>): T =
+                    AuthViewModel(journeyName) as T
+            }
+    }
+}
+

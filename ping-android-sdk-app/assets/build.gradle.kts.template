@@ -1,0 +1,95 @@
+/*
+ * build.gradle.kts template for an Android app module using the Ping Identity Journey SDK.
+ *
+ * INSTRUCTIONS:
+ *   1. Copy the `dependencies {}` block into your app-level build.gradle.kts.
+ *   2. Adjust version catalog aliases to match your libs.versions.toml.
+ *   3. Ensure `manifestPlaceholders["appRedirectUriScheme"]` matches your redirect URI scheme.
+ */
+
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+plugins {
+    alias(libs.plugins.androidApplication)
+    alias(libs.plugins.kotlinAndroid)
+    alias(libs.plugins.compose.compiler)
+}
+
+android {
+    namespace = "com.example.myapp"
+    compileSdk = 36
+
+    defaultConfig {
+        applicationId = "com.example.myapp"
+        minSdk = 29
+        targetSdk = 36
+        versionCode = 1
+        versionName = "1.0"
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Must match the scheme in your redirectUri (e.g. "org.forgerock.demo:/oauth2redirect")
+        manifestPlaceholders["appRedirectUriScheme"] = "org.forgerock.demo"
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
+        }
+    }
+}
+
+dependencies {
+
+    // ── Ping Identity Journey SDK ─────────────────────────────────────────────
+    // Option A: published artifact (replace <version> with the current release)
+    implementation("com.pingidentity.sdks:journey:<version>")
+    implementation("com.pingidentity.sdks:binding:<version>")
+    implementation("com.pingidentity.sdks:recaptcha-enterprise:<version>")
+    implementation("com.pingidentity.sdks:device-profile:<version>")
+    implementation("com.pingidentity.sdks:external-idp:<version>")
+
+    // Option B: local project reference (monorepo / source build)
+    // implementation(project(":journey"))
+
+    // ── Jetpack Compose ───────────────────────────────────────────────────────
+    val composeBom = platform(libs.androidx.compose.bom)
+    implementation(composeBom)
+    implementation(libs.compose.ui)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.foundation)
+    implementation(libs.androidx.ui.tooling.preview)
+    debugImplementation(libs.androidx.ui.tooling)
+
+    // ── AndroidX ──────────────────────────────────────────────────────────────
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)   // viewModel() helper
+    implementation(libs.androidx.datastore.preferences)         // Token/session persistence
+
+    // ── Material Icons (for password visibility toggle, error icons, etc.) ────
+    implementation(libs.androidx.material.icons.extended)
+
+    // ── Testing ───────────────────────────────────────────────────────────────
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
+}
+

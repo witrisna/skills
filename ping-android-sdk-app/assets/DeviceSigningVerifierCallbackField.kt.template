@@ -1,0 +1,237 @@
+/*
+ * DeviceSigningVerifierCallbackField + UserKeyDialog
+ *
+ * INSTRUCTIONS:
+ *   1. Place in com/example/myapp/auth/callback/DeviceSigningVerifierCallbackField.kt
+ *   2. Requires Gradle dependency: implementation(project(":mfa:binding"))
+ *   3. Also create DeviceSigningVerifierCallbackViewModel.kt (see template).
+ *   4. PinCollectorDialog is defined in DeviceBindingCallbackField.kt — ensure that
+ *      file is also present in the same package.
+ */
+
+package com.example.myapp.auth.callback
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.pingidentity.device.binding.UserKey
+
+/**
+ * Renders the Device Signing Verifier UI.
+ *
+ * When [showChallenge] is `true`, the challenge text is displayed along with an
+ * "Approve" button — useful for debugging or high-assurance flows.
+ * When `false`, signing starts automatically via [LaunchedEffect].
+ *
+ * If the signing key requires a PIN or UserKey selection, the respective dialogs
+ * are shown automatically via [DeviceSigningVerifierCallbackViewModel].
+ */
+@Composable
+fun DeviceSigningVerifierCallbackField(
+    viewModel: DeviceSigningVerifierCallbackViewModel,
+    showChallenge: Boolean = false,
+    onNext: () -> Unit,
+) {
+    val currentOnNext by rememberUpdatedState(onNext)
+
+    // Show PIN dialog if requested by ViewModel
+    viewModel.activePinPrompt?.let { prompt ->
+        PinCollectorDialog(
+            prompt = prompt,
+            onPinEntered = { viewModel.submitPin(it.toCharArray()) },
+            onCancelled = { viewModel.cancelPin() },
+        )
+    }
+
+    // Show UserKey selection dialog if requested by ViewModel
+    viewModel.activeUserKeyPrompt?.let { keys ->
+        UserKeyDialog(
+            userKeys = keys,
+            onUserKeySelected = { viewModel.submitUserKey(it) },
+            onCancelled = { viewModel.cancelUserKey() },
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .wrapContentSize(Alignment.Center),
+    ) {
+        // Loading spinner (always rendered behind the content)
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (viewModel.isLoading) CircularProgressIndicator()
+        }
+
+        if (showChallenge) {
+            // Manual approval mode: show challenge text + Approve button
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Card(
+                    elevation = CardDefaults.cardElevation(defaultElevation = 10.dp),
+                    modifier = Modifier.fillMaxWidth().padding(8.dp),
+                    border = BorderStroke(2.dp, Color.Black),
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Text(
+                        text = viewModel.callback.challenge,
+                        modifier = Modifier.padding(4.dp),
+                    )
+                }
+
+                viewModel.signError?.let { error ->
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Error: $error",
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(8.dp),
+                    )
+                }
+
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    modifier = Modifier.align(Alignment.End),
+                    enabled = !viewModel.isLoading,
+                    onClick = {
+                        viewModel.clearError()
+                        viewModel.sign { result ->
+                            result.onFailure { it.printStackTrace() }
+                            currentOnNext()
+                        }
+                    },
+                ) {
+                    Text(if (viewModel.isLoading) "Signing..." else "Approve")
+                }
+            }
+        } else {
+            // Automatic mode: start signing immediately
+            LaunchedEffect(true) {
+                viewModel.sign { result ->
+                    result.onFailure { it.printStackTrace() }
+                    currentOnNext()
+                }
+            }
+        }
+    }
+}
+
+// ── UserKeyDialog ─────────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun UserKeyDialog(
+    userKeys: List<UserKey>,
+    onUserKeySelected: (UserKey) -> Unit,
+    onCancelled: () -> Unit,
+) {
+    var selectedUserKey by remember { mutableStateOf<UserKey?>(null) }
+    var expanded by remember { mutableStateOf(false) }
+
+    Dialog(
+        onDismissRequest = onCancelled,
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = false),
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            ),
+            shape = MaterialTheme.shapes.large,
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text("Select User Key", style = MaterialTheme.typography.headlineSmall)
+
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded },
+                ) {
+                    OutlinedTextField(
+                        value = selectedUserKey?.let { "${it.userName} (${it.authType.name})" } ?: "",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Select User Key") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(MenuAnchorType.PrimaryNotEditable, true),
+                        shape = MaterialTheme.shapes.medium,
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false },
+                    ) {
+                        userKeys.forEach { key ->
+                            DropdownMenuItem(
+                                text = { Text("${key.userName} (${key.authType.name})") },
+                                onClick = {
+                                    selectedUserKey = key
+                                    expanded = false
+                                },
+                            )
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onCancelled) { Text("Cancel") }
+                    Spacer(Modifier.width(8.dp))
+                    Button(
+                        onClick = { selectedUserKey?.let { onUserKeySelected(it) } },
+                        enabled = selectedUserKey != null,
+                    ) {
+                        Text("Confirm")
+                    }
+                }
+            }
+        }
+    }
+}
+

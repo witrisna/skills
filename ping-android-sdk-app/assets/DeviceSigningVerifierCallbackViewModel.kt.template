@@ -1,0 +1,126 @@
+/*
+ * DeviceSigningVerifierCallbackViewModel — manages signing state, PIN dialog,
+ * and UserKey selection dialog for DeviceSigningVerifierCallback.
+ *
+ * INSTRUCTIONS:
+ *   1. Place in com/example/myapp/auth/callback/DeviceSigningVerifierCallbackViewModel.kt
+ *   2. Requires Gradle dependency: implementation(project(":mfa:binding"))
+ */
+
+package com.example.myapp.auth.callback
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.pingidentity.device.binding.Prompt
+import com.pingidentity.device.binding.UserKey
+import com.pingidentity.device.binding.journey.DeviceSigningVerifierCallback
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
+
+/**
+ * ViewModel wrapper for [DeviceSigningVerifierCallback].
+ *
+ * Coordinates two optional dialogs:
+ * - [activePinPrompt]      — shown when the signing key requires PIN verification.
+ * - [activeUserKeyPrompt]  — shown when multiple bound keys exist and the user must choose one.
+ */
+class DeviceSigningVerifierCallbackViewModel(
+    val callback: DeviceSigningVerifierCallback,
+) : ViewModel() {
+
+    var isLoading by mutableStateOf(false)
+        private set
+
+    var signError by mutableStateOf<String?>(null)
+        private set
+
+    /** Non-null while the UI must display a PIN entry dialog. */
+    var activePinPrompt: Prompt? by mutableStateOf(null)
+        private set
+
+    /** Non-null while the UI must display a UserKey selection dialog. */
+    var activeUserKeyPrompt: List<UserKey>? by mutableStateOf(null)
+        private set
+
+    private var pinDeferred: CompletableDeferred<CharArray>? = null
+    private var userKeyDeferred: CompletableDeferred<UserKey>? = null
+
+    /**
+     * Initiate the signing operation.
+     *
+     * @param onCompleted Invoked when signing completes (success or failure).
+     */
+    fun sign(onCompleted: (Result<*>) -> Unit) {
+        if (isLoading) return
+        viewModelScope.launch {
+            isLoading = true
+            signError = null
+
+            val result = callback.sign {
+                appPinConfig {
+                    pinCollector { prompt ->
+                        pinDeferred = CompletableDeferred()
+                        activePinPrompt = prompt
+                        pinDeferred!!.await().also { activePinPrompt = null }
+                    }
+                }
+
+                userKeySelector { userKeys ->
+                    userKeyDeferred = CompletableDeferred()
+                    activeUserKeyPrompt = userKeys
+                    userKeyDeferred!!.await().also { activeUserKeyPrompt = null }
+                }
+
+                biometricAuthenticatorConfig {
+                    promptInfo {
+                        setConfirmationRequired(true)
+                        setTitle("Biometric Authentication")
+                        setSubtitle("Please authenticate to sign")
+                        setDescription("This app requires biometric authentication to sign in")
+                    }
+                }
+            }
+
+            isLoading = false
+            result.onFailure { error ->
+                signError = error.message ?: "Unknown signing error"
+            }
+            onCompleted(result)
+        }
+    }
+
+    /** Clear any displayed error message. */
+    fun clearError() { signError = null }
+
+    // ── PIN dialog responses ──────────────────────────────────────────────────
+    fun submitPin(pin: CharArray) {
+        pinDeferred?.takeIf { it.isActive }?.complete(pin)
+    }
+    fun cancelPin(reason: String = "User cancelled PIN entry") {
+        pinDeferred?.takeIf { it.isActive }?.completeExceptionally(RuntimeException(reason))
+        activePinPrompt = null
+    }
+
+    // ── UserKey dialog responses ──────────────────────────────────────────────
+    fun submitUserKey(userKey: UserKey) {
+        userKeyDeferred?.takeIf { it.isActive }?.complete(userKey)
+    }
+    fun cancelUserKey(reason: String = "User cancelled key selection") {
+        userKeyDeferred?.takeIf { it.isActive }?.completeExceptionally(RuntimeException(reason))
+        activeUserKeyPrompt = null
+    }
+
+    companion object {
+        fun factory(callback: DeviceSigningVerifierCallback): ViewModelProvider.Factory =
+            object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(modelClass: Class<T>): T =
+                    DeviceSigningVerifierCallbackViewModel(callback) as T
+            }
+    }
+}
+

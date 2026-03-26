@@ -1,0 +1,811 @@
+/*
+ * Individual callback field Composables — covers all Journey callback types.
+ *
+ * INSTRUCTIONS:
+ *   Place this file in com/example/myapp/auth/callback/CallbackFields.kt
+ *   Each function renders a single Journey callback type.
+ *   You can split these into separate files if the number of callbacks grows large.
+ *
+ *   Optional-module callbacks (DeviceProfile, ReCaptcha, IdP, Protect, FIDO, DeviceBinding)
+ *   are included at the bottom. Remove any you do not need and remove the corresponding
+ *   Gradle dependencies.
+ */
+
+package com.example.myapp.auth.callback
+
+import android.os.Build
+import android.util.Log
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.dp
+
+// ── Core Journey callbacks ─────────────────────────────────────────────────────
+import com.pingidentity.journey.callback.BooleanAttributeInputCallback
+import com.pingidentity.journey.callback.ChoiceCallback
+import com.pingidentity.journey.callback.ConfirmationCallback
+import com.pingidentity.journey.callback.ConsentMappingCallback
+import com.pingidentity.journey.callback.KbaCreateCallback
+import com.pingidentity.journey.callback.NameCallback
+import com.pingidentity.journey.callback.NumberAttributeInputCallback
+import com.pingidentity.journey.callback.PasswordCallback
+import com.pingidentity.journey.callback.PollingWaitCallback
+import com.pingidentity.journey.callback.StringAttributeInputCallback
+import com.pingidentity.journey.callback.SuspendedTextOutputCallback
+import com.pingidentity.journey.callback.TermsAndConditionsCallback
+import com.pingidentity.journey.callback.TextInputCallback
+import com.pingidentity.journey.callback.TextOutputCallback
+import com.pingidentity.journey.callback.ValidatedPasswordCallback
+import com.pingidentity.journey.callback.ValidatedUsernameCallback
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+// ── Optional module callbacks ──────────────────────────────────────────────────
+import com.pingidentity.device.profile.DeviceProfileCallback
+import com.pingidentity.device.profile.DeviceProfileConfig
+import com.pingidentity.device.profile.collector.BluetoothCollector
+import com.pingidentity.device.profile.collector.BrowserCollector
+import com.pingidentity.device.profile.collector.HardwareCollector
+import com.pingidentity.device.profile.collector.NetworkCollector
+import com.pingidentity.device.profile.collector.PlatformCollector
+import com.pingidentity.device.profile.collector.TelephonyCollector
+import com.pingidentity.fido.journey.FidoAuthenticationCallback
+import com.pingidentity.fido.journey.FidoRegistrationCallback
+import com.pingidentity.idp.journey.IdpCallback
+import com.pingidentity.idp.journey.SelectIdpCallback
+import com.pingidentity.protect.journey.PingOneProtectEvaluationCallback
+import com.pingidentity.protect.journey.PingOneProtectInitializeCallback
+import com.pingidentity.recaptcha.enterprise.ReCaptchaEnterpriseCallback
+
+// ── NameCallback ──────────────────────────────────────────────────────────────
+
+@Composable
+fun NameCallbackField(field: NameCallback, onNodeUpdated: () -> Unit) {
+    var text by remember(field) { mutableStateOf(field.name) }
+    Row(
+        modifier = Modifier.padding(4.dp).fillMaxWidth()
+    ) {
+        Spacer(Modifier.weight(1f))
+        OutlinedTextField(
+            modifier = Modifier.wrapContentWidth(Alignment.CenterHorizontally),
+            value = text,
+            onValueChange = {
+                text = it
+                field.name = it
+                onNodeUpdated()
+            },
+            label = { Text(field.prompt) },
+        )
+        Spacer(Modifier.weight(1f))
+    }
+}
+
+// ── PasswordCallback ──────────────────────────────────────────────────────────
+
+@Composable
+fun PasswordCallbackField(field: PasswordCallback, onNodeUpdated: () -> Unit) {
+    var password by remember(field) { mutableStateOf("") }
+    var visible by remember { mutableStateOf(false) }
+
+    Row(modifier = Modifier.padding(4.dp).fillMaxWidth()) {
+        Spacer(Modifier.weight(1f))
+        OutlinedTextField(
+            modifier = Modifier.wrapContentWidth(Alignment.CenterHorizontally),
+            value = password,
+            onValueChange = {
+                password = it
+                field.password = it
+                onNodeUpdated()
+            },
+            label = { Text(field.prompt) },
+            visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            trailingIcon = {
+                IconButton(onClick = { visible = !visible }) {
+                    Icon(
+                        if (visible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+                        contentDescription = if (visible) "Hide password" else "Show password",
+                    )
+                }
+            },
+        )
+        Spacer(Modifier.weight(1f))
+    }
+}
+
+// ── ValidatedUsernameCallback ─────────────────────────────────────────────────
+
+@Composable
+fun ValidatedUsernameCallbackField(field: ValidatedUsernameCallback, onNodeUpdated: () -> Unit) {
+    var text by remember(field) { mutableStateOf("") }
+    Row(modifier = Modifier.padding(4.dp).fillMaxWidth()) {
+        Spacer(Modifier.weight(1f))
+        OutlinedTextField(
+            modifier = Modifier.wrapContentWidth(Alignment.CenterHorizontally),
+            value = text,
+            onValueChange = {
+                text = it
+                field.username = it
+                onNodeUpdated()
+            },
+            label = { Text(field.prompt) },
+        )
+        Spacer(Modifier.weight(1f))
+    }
+}
+
+// ── ValidatedPasswordCallback ─────────────────────────────────────────────────
+
+@Composable
+fun ValidatedPasswordCallbackField(field: ValidatedPasswordCallback, onNodeUpdated: () -> Unit) {
+    var password by remember(field) { mutableStateOf("") }
+    var visible by remember { mutableStateOf(false) }
+
+    Row(modifier = Modifier.padding(4.dp).fillMaxWidth()) {
+        Spacer(Modifier.weight(1f))
+        OutlinedTextField(
+            modifier = Modifier.wrapContentWidth(Alignment.CenterHorizontally),
+            value = password,
+            onValueChange = {
+                password = it
+                field.password = it
+                onNodeUpdated()
+            },
+            label = { Text(field.prompt) },
+            visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            trailingIcon = {
+                IconButton(onClick = { visible = !visible }) {
+                    Icon(
+                        if (visible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+                        contentDescription = null,
+                    )
+                }
+            },
+        )
+        Spacer(Modifier.weight(1f))
+    }
+}
+
+// ── TextInputCallback ─────────────────────────────────────────────────────────
+
+@Composable
+fun TextInputCallbackField(field: TextInputCallback, onNodeUpdated: () -> Unit) {
+    var text by remember(field) { mutableStateOf(field.defaultText) }
+    Row(modifier = Modifier.padding(4.dp).fillMaxWidth()) {
+        Spacer(Modifier.weight(1f))
+        OutlinedTextField(
+            modifier = Modifier.wrapContentWidth(Alignment.CenterHorizontally),
+            value = text,
+            onValueChange = {
+                text = it
+                field.text = it
+                onNodeUpdated()
+            },
+            label = { Text(field.prompt) },
+        )
+        Spacer(Modifier.weight(1f))
+    }
+}
+
+// ── TextOutputCallback ────────────────────────────────────────────────────────
+
+@Composable
+fun TextOutputCallbackField(field: TextOutputCallback) {
+    Text(
+        text = field.message,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(4.dp),
+    )
+}
+
+@Composable
+fun TextOutputCallbackField(field: SuspendedTextOutputCallback) {
+    Text(
+        text = field.message,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(4.dp),
+    )
+}
+
+// ── ChoiceCallback ────────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChoiceCallbackField(field: ChoiceCallback, onNodeUpdated: () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    var selected by remember(field) {
+        mutableStateOf(field.choices.getOrNull(field.defaultChoice) ?: "")
+    }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = Modifier.padding(4.dp).fillMaxWidth(),
+    ) {
+        OutlinedTextField(
+            value = selected,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(field.prompt) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+            modifier = Modifier.menuAnchor().fillMaxWidth(),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            field.choices.forEachIndexed { index, choice ->
+                DropdownMenuItem(
+                    text = { Text(choice) },
+                    onClick = {
+                        selected = choice
+                        field.selectedIndex = index
+                        expanded = false
+                        onNodeUpdated()
+                    },
+                )
+            }
+        }
+    }
+}
+
+// ── ConfirmationCallback ──────────────────────────────────────────────────────
+
+@Composable
+fun ConfirmationCallbackField(field: ConfirmationCallback, onNext: () -> Unit) {
+    Row(
+        modifier = Modifier.padding(4.dp).fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Spacer(Modifier.weight(1f))
+        field.options.forEachIndexed { index, label ->
+            Button(
+                onClick = {
+                    field.selectedIndex = index
+                    onNext()
+                },
+                modifier = Modifier.padding(horizontal = 4.dp),
+            ) {
+                Text(label)
+            }
+        }
+    }
+}
+
+// ── BooleanAttributeInputCallback ─────────────────────────────────────────────
+
+@Composable
+fun BooleanAttributeInputCallbackField(field: BooleanAttributeInputCallback, onNodeUpdated: () -> Unit) {
+    var checked by remember(field) { mutableStateOf(field.value) }
+    Row(
+        modifier = Modifier.padding(4.dp).fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(
+            checked = checked,
+            onCheckedChange = {
+                checked = it
+                field.value = it
+                onNodeUpdated()
+            },
+        )
+        Text(field.prompt, modifier = Modifier.padding(start = 8.dp))
+    }
+}
+
+// ── NumberAttributeInputCallback ──────────────────────────────────────────────
+
+@Composable
+fun NumberAttributeInputCallbackField(field: NumberAttributeInputCallback, onNodeUpdated: () -> Unit) {
+    var text by remember(field) { mutableStateOf(field.value.toString()) }
+    Row(modifier = Modifier.padding(4.dp).fillMaxWidth()) {
+        Spacer(Modifier.weight(1f))
+        OutlinedTextField(
+            modifier = Modifier.wrapContentWidth(Alignment.CenterHorizontally),
+            value = text,
+            onValueChange = {
+                text = it
+                it.toDoubleOrNull()?.let { num ->
+                    field.value = num
+                    onNodeUpdated()
+                }
+            },
+            label = { Text(field.prompt) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        )
+        Spacer(Modifier.weight(1f))
+    }
+}
+
+// ── StringAttributeInputCallback ──────────────────────────────────────────────
+
+@Composable
+fun StringAttributeInputCallbackField(field: StringAttributeInputCallback, onNodeUpdated: () -> Unit) {
+    var text by remember(field) { mutableStateOf(field.value) }
+    Row(modifier = Modifier.padding(4.dp).fillMaxWidth()) {
+        Spacer(Modifier.weight(1f))
+        OutlinedTextField(
+            modifier = Modifier.wrapContentWidth(Alignment.CenterHorizontally),
+            value = text,
+            onValueChange = {
+                text = it
+                field.value = it
+                onNodeUpdated()
+            },
+            label = { Text(field.prompt) },
+        )
+        Spacer(Modifier.weight(1f))
+    }
+}
+
+// ── TermsAndConditionsCallback ────────────────────────────────────────────────
+
+@Composable
+fun TermsAndConditionsCallbackField(field: TermsAndConditionsCallback, onNodeUpdated: () -> Unit) {
+    var accepted by remember(field) { mutableStateOf(false) }
+    Column(modifier = Modifier.padding(4.dp).fillMaxWidth()) {
+        Text(field.terms, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(
+                checked = accepted,
+                onCheckedChange = {
+                    accepted = it
+                    field.accepted = it
+                    onNodeUpdated()
+                },
+            )
+            Text("I accept the Terms and Conditions", modifier = Modifier.padding(start = 8.dp))
+        }
+    }
+}
+
+// ── PollingWaitCallback ───────────────────────────────────────────────────────
+
+/**
+ * Displays [field.message] and automatically advances after [field.waitTime] milliseconds.
+ * This composable handles its own "showNext = false" logic by never calling [onNext] via button.
+ */
+@Composable
+fun PollingWaitCallbackField(field: PollingWaitCallback, onNext: () -> Unit) {
+    LaunchedEffect(field) {
+        delay(field.waitTime.toLong())
+        onNext()
+    }
+    Text(
+        text = field.message,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(4.dp),
+    )
+    Spacer(Modifier.height(8.dp))
+}
+
+// ── ConsentMappingCallback ────────────────────────────────────────────────────
+
+@Composable
+fun ConsentMappingCallbackField(callback: ConsentMappingCallback, onNodeUpdated: () -> Unit) {
+    var accepted by remember(callback) { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .padding(16.dp)
+            .fillMaxWidth(),
+    ) {
+        Text(text = "Name: ${callback.name}", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(4.dp))
+        Text(text = "Display Name: ${callback.displayName}", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(4.dp))
+        Text(text = "Access Level: ${callback.accessLevel}", style = MaterialTheme.typography.bodyMedium)
+        Text(text = "Required: ${callback.isRequired}", style = MaterialTheme.typography.bodyMedium)
+        callback.fields.forEach { field ->
+            Text(text = "Field: $field", style = MaterialTheme.typography.bodySmall)
+        }
+        if (callback.message.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            Text(text = callback.message, style = MaterialTheme.typography.bodySmall)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(
+                checked = accepted,
+                onCheckedChange = {
+                    accepted = it
+                    callback.accepted = it
+                    onNodeUpdated()
+                },
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(text = "I consent", modifier = Modifier.padding(start = 8.dp))
+        }
+    }
+}
+
+// ── KbaCreateCallback ─────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun KbaCreateCallbackField(callback: KbaCreateCallback, onNodeUpdated: () -> Unit) {
+    var expanded by remember(callback) { mutableStateOf(false) }
+    var selectedItem by remember(callback) { mutableStateOf(callback.predefinedQuestions[0]) }
+    var isCustomQuestion by remember(callback) { mutableStateOf(false) }
+    var customQuestion by remember(callback) { mutableStateOf("") }
+    var answer by remember(callback) { mutableStateOf("") }
+
+    // Set the default question on first composition
+    LaunchedEffect(true) { callback.selectedQuestion = selectedItem }
+
+    Column(
+        modifier = Modifier
+            .padding(8.dp)
+            .fillMaxWidth(),
+    ) {
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = !expanded },
+        ) {
+            TextField(
+                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable, true),
+                value = if (isCustomQuestion) "Provide your own" else selectedItem,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text(callback.prompt) },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+                colors = ExposedDropdownMenuDefaults.textFieldColors(),
+            )
+            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                callback.predefinedQuestions.forEachIndexed { index, question ->
+                    DropdownMenuItem(
+                        text = { Text(question) },
+                        onClick = {
+                            selectedItem = question
+                            isCustomQuestion = false
+                            expanded = false
+                            callback.selectedQuestion = callback.predefinedQuestions[index]
+                            onNodeUpdated()
+                        },
+                    )
+                }
+                if (callback.allowUserDefinedQuestions) {
+                    DropdownMenuItem(
+                        text = { Text("Provide your own") },
+                        onClick = {
+                            isCustomQuestion = true
+                            expanded = false
+                            callback.selectedQuestion = ""
+                            onNodeUpdated()
+                        },
+                    )
+                }
+            }
+        }
+
+        if (isCustomQuestion) {
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                value = customQuestion,
+                onValueChange = {
+                    customQuestion = it
+                    callback.selectedQuestion = it
+                    onNodeUpdated()
+                },
+                label = { Text("Your Question") },
+            )
+        }
+
+        OutlinedTextField(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            value = answer,
+            onValueChange = {
+                answer = it
+                callback.selectedAnswer = it
+                onNodeUpdated()
+            },
+            label = { Text("Answer") },
+        )
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// OPTIONAL MODULE CALLBACKS
+// Each section below requires the stated Gradle dependency.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── DeviceProfileCallback (:foundation:device:device-profile) ─────────────────
+// implementation(project(":foundation:device:device-profile"))
+
+@Composable
+fun DeviceProfileCallbackField(callback: DeviceProfileCallback, onNext: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var isLoading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(true) {
+        scope.launch {
+            callback.collect {
+                collectors {
+                    clear()
+                    add(PlatformCollector())
+                    add(HardwareCollector())
+                    add(NetworkCollector())
+                    add(TelephonyCollector)
+                    add(BluetoothCollector)
+                    add(BrowserCollector)
+                }
+            }
+            isLoading = false
+            onNext()
+        }
+    }
+
+    if (isLoading) {
+        AutoProgressIndicator(message = "Gathering Device Profile...")
+    }
+}
+
+// ── ReCaptchaEnterpriseCallback (:recaptcha-enterprise) ──────────────────────
+// implementation(project(":recaptcha-enterprise"))
+
+@Composable
+fun ReCaptchaEnterpriseCallbackField(callback: ReCaptchaEnterpriseCallback, onNext: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var isLoading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(true) {
+        scope.launch {
+            callback.verify { }
+                .onSuccess {
+                    isLoading = false
+                    onNext()
+                }
+                .onFailure {
+                    isLoading = false
+                    onNext() // proceed even on failure — adjust for production
+                }
+        }
+    }
+
+    if (isLoading) {
+        AutoProgressIndicator(message = "ReCaptcha verification in progress...")
+    }
+}
+
+// ── SelectIdpCallback (:external-idp) ────────────────────────────────────────
+// implementation(project(":external-idp"))
+
+@Composable
+fun SelectIdpCallbackField(callback: SelectIdpCallback, onSelected: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        callback.providers.forEach { provider ->
+            Row(
+                modifier = Modifier
+                    .padding(4.dp)
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                // Replace with brand icon drawables if available (e.g. R.drawable.google)
+                Button(
+                    onClick = {
+                        callback.value = provider.provider
+                        onSelected()
+                    },
+                    modifier = Modifier.fillMaxWidth(0.7f),
+                ) {
+                    Text(provider.provider)
+                }
+            }
+        }
+    }
+}
+
+// ── IdpCallback (:external-idp) ───────────────────────────────────────────────
+// implementation(project(":external-idp"))
+//
+// IMPORTANT: Provide the OAuth2 redirectUri from your OIDC configuration.
+// Replace `redirectUri` below with your actual android.net.Uri redirect value.
+
+@Composable
+fun IdpCallbackField(callback: IdpCallback, onNext: () -> Unit) {
+    val currentOnNext by rememberUpdatedState(onNext)
+
+    Column(
+        modifier = Modifier
+            .padding(8.dp)
+            .fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("Launching ${callback.provider} Social Login...")
+        Spacer(Modifier.height(8.dp))
+        CircularProgressIndicator()
+
+        LaunchedEffect(true) {
+            // TODO: Replace with your actual redirectUri android.net.Uri
+            // callback.authorize(redirectUri)
+            currentOnNext()
+        }
+    }
+}
+
+// ── PingOneProtectInitializeCallback (:protect) ───────────────────────────────
+// implementation(project(":protect"))
+
+@Composable
+fun PingOneProtectInitializeField(field: PingOneProtectInitializeCallback, onNext: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var isLoading by remember(field) { mutableStateOf(true) }
+
+    LaunchedEffect(field) {
+        scope.launch {
+            try {
+                val start = System.currentTimeMillis()
+                field.start()
+                val remaining = 2_000L - (System.currentTimeMillis() - start)
+                if (remaining > 0) delay(remaining)
+                isLoading = false
+                onNext()
+            } catch (e: Exception) {
+                isLoading = false
+            }
+        }
+    }
+
+    if (isLoading) {
+        AutoProgressIndicator(message = "Initializing security checks...")
+    }
+}
+
+// ── PingOneProtectEvaluationCallback (:protect) ───────────────────────────────
+
+@Composable
+fun PingOneProtectEvaluationField(field: PingOneProtectEvaluationCallback, onNext: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var isLoading by remember(field) { mutableStateOf(true) }
+
+    LaunchedEffect(field) {
+        scope.launch {
+            try {
+                val start = System.currentTimeMillis()
+                field.collect()
+                val remaining = 2_000L - (System.currentTimeMillis() - start)
+                if (remaining > 0) delay(remaining)
+                isLoading = false
+                onNext()
+            } catch (e: Exception) {
+                isLoading = false
+            }
+        }
+    }
+
+    if (isLoading) {
+        AutoProgressIndicator(message = "Evaluating security signals...")
+    }
+}
+
+// ── FidoRegistrationCallback (:mfa:fido) ──────────────────────────────────────
+// implementation(project(":mfa:fido"))
+
+@Composable
+fun FidoRegistrationField(callback: FidoRegistrationCallback, onNext: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val currentOnNext by rememberUpdatedState(onNext)
+    var deviceName by remember { mutableStateOf(Build.MODEL) }
+    var showProgress by remember { mutableStateOf(false) }
+
+    Box(
+        modifier = Modifier.padding(4.dp).fillMaxWidth(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            if (showProgress) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+                Spacer(Modifier.height(8.dp))
+            }
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = deviceName,
+                onValueChange = { deviceName = it },
+                label = { Text("Device Name") },
+            )
+            Spacer(Modifier.height(8.dp))
+            Button(
+                modifier = Modifier.align(Alignment.End),
+                onClick = {
+                    showProgress = true
+                    scope.launch {
+                        callback.register(deviceName)
+                            .onSuccess { currentOnNext() }
+                            .onFailure {
+                                Log.e("FidoRegistration", "Failed to register", it)
+                                currentOnNext()
+                            }
+                    }
+                },
+            ) {
+                Text("Continue")
+            }
+        }
+    }
+}
+
+// ── FidoAuthenticationCallback (:mfa:fido) ────────────────────────────────────
+
+@Composable
+fun FidoAuthenticationField(callback: FidoAuthenticationCallback, onNext: () -> Unit) {
+    val currentOnNext by rememberUpdatedState(onNext)
+
+    Box(
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        CircularProgressIndicator()
+        LaunchedEffect(true) {
+            launch {
+                callback.authenticate()
+                    .onSuccess { currentOnNext() }
+                    .onFailure {
+                        Log.e("FidoAuthentication", "Failed to authenticate", it)
+                        currentOnNext()
+                    }
+            }
+        }
+    }
+}
+
+// ── Shared loading indicator ──────────────────────────────────────────────────
+
+@Composable
+private fun AutoProgressIndicator(message: String) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(16.dp),
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(48.dp))
+            Spacer(Modifier.height(16.dp))
+            Text(text = message)
+        }
+    }
+}
+

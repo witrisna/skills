@@ -1,0 +1,55 @@
+/*
+ * Journey + OIDC Configuration
+ *
+ * INSTRUCTIONS:
+ *   1. Replace all <placeholder> values with your actual PingOne AIC tenant details.
+ *   2. Place this file in your app module, e.g.:
+ *        com/example/myapp/auth/JourneyConfig.kt
+ *   3. Import `journey` wherever you need to start/use authentication.
+ */
+
+package com.example.myapp.auth
+
+import com.pingidentity.journey.Journey
+import com.pingidentity.journey.module.Oidc
+import com.pingidentity.logger.Logger
+import com.pingidentity.logger.STANDARD
+
+// ─── Configure these values ───────────────────────────────────────────────────
+private const val SERVER_URL        = "https://<your-tenant>.forgeblocks.com/am"
+private const val REALM             = "alpha"                // Your AIC realm
+private const val COOKIE_NAME       = "<your-cookie-name>"  // Optional: SSO cookie name
+private const val CLIENT_ID         = "<your-client-id>"
+private const val DISCOVERY_ENDPOINT =
+    "https://<your-tenant>.forgeblocks.com/am/oauth2/$REALM/.well-known/openid-configuration"
+private const val REDIRECT_URI      = "org.forgerock.demo:/oauth2redirect"
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Singleton Journey instance.
+ *
+ * Usage:
+ *   val node = journey.start("Login")
+ *   val user = journey.user()
+ */
+val journey = Journey {
+    logger    = Logger.STANDARD
+    serverUrl = SERVER_URL
+    realm     = REALM
+    cookie    = COOKIE_NAME
+
+    module(Oidc) {
+        clientId          = CLIENT_ID
+        discoveryEndpoint = DISCOVERY_ENDPOINT
+        scopes            = mutableSetOf("openid", "email", "profile", "phone")
+        redirectUri       = REDIRECT_URI
+
+        // Optional: encrypted persistent token storage
+        // storage {
+        //     fileName           = "oidc_tokens"
+        //     keyAlias           = "MyKeyAlias"   // enables AndroidKeyStore encryption
+        //     strongBoxPreferred = true
+        // }
+    }
+}
+

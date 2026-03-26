@@ -1,0 +1,104 @@
+/*
+ * DeviceBindingCallbackViewModel — manages PIN dialog state and binding lifecycle.
+ *
+ * INSTRUCTIONS:
+ *   1. Place in com/example/myapp/auth/callback/DeviceBindingCallbackViewModel.kt
+ *   2. Requires Gradle dependency: implementation(project(":mfa:binding"))
+ */
+
+package com.example.myapp.auth.callback
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.pingidentity.device.binding.Prompt
+import com.pingidentity.device.binding.journey.DeviceBindingCallback
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
+
+/**
+ * ViewModel wrapper for [DeviceBindingCallback] that coordinates PIN collection
+ * through Compose state — avoiding the need to pass lambda collectors up through the UI tree.
+ *
+ * Flow:
+ *  1. UI calls [bind] with the chosen device name.
+ *  2. If the authenticator type requires a PIN, the SDK suspends and triggers [pinCollector].
+ *  3. [pinCollector] sets [activePinPrompt], which causes the UI to show [PinCollectorDialog].
+ *  4. User enters PIN → UI calls [submitPin]; deferred is resolved; SDK continues.
+ *  5. On completion, [bind]'s onCompleted lambda is invoked.
+ */
+class DeviceBindingCallbackViewModel(
+    val callback: DeviceBindingCallback,
+) : ViewModel() {
+
+    var isLoading by mutableStateOf(false)
+        private set
+
+    /** Non-null while the UI must display a PIN entry dialog. */
+    var activePinPrompt: Prompt? by mutableStateOf(null)
+        private set
+
+    private var pinDeferred: CompletableDeferred<CharArray>? = null
+
+    /**
+     * Start the device binding process.
+     *
+     * @param deviceName   Human-readable name stored with the bound key (defaults to device model).
+     * @param onCompleted  Invoked when binding finishes (success or failure).
+     */
+    fun bind(
+        deviceName: String,
+        onCompleted: (Result<*>) -> Unit,
+    ) {
+        if (isLoading) return
+        viewModelScope.launch {
+            isLoading = true
+            val result = callback.bind {
+                this.deviceName = deviceName
+                appPinConfig {
+                    pinCollector { prompt ->
+                        pinDeferred = CompletableDeferred()
+                        activePinPrompt = prompt
+                        // Suspend coroutine until user provides the PIN
+                        pinDeferred!!.await().also {
+                            activePinPrompt = null
+                        }
+                    }
+                }
+                biometricAuthenticatorConfig {
+                    keyGenParameterSpec {
+                        // Uncomment to customise key generation parameters:
+                        // setUnlockedDeviceRequired(true)
+                        // setUserAuthenticationValidWhileOnBody(true)
+                    }
+                }
+            }.onFailure { it.printStackTrace() }
+            isLoading = false
+            onCompleted(result)
+        }
+    }
+
+    /** Called by the PIN dialog when the user confirms entry. */
+    fun submitPin(pin: CharArray) {
+        pinDeferred?.takeIf { it.isActive }?.complete(pin)
+    }
+
+    /** Called by the PIN dialog when the user cancels. */
+    fun cancelPin(reason: String = "User cancelled PIN entry") {
+        pinDeferred?.takeIf { it.isActive }?.completeExceptionally(RuntimeException(reason))
+        activePinPrompt = null
+    }
+
+    companion object {
+        fun factory(callback: DeviceBindingCallback): ViewModelProvider.Factory =
+            object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(modelClass: Class<T>): T =
+                    DeviceBindingCallbackViewModel(callback) as T
+            }
+    }
+}
+
