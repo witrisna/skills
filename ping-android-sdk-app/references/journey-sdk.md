@@ -81,7 +81,7 @@ when (node) {
 val user = journey.user()          // Returns User? — null if not authenticated
 
 // Token access
-val accessToken  = user?.accessToken()
+val accessToken  = user?.token()
 val ssoToken     = user?.ssoToken()
 
 // OIDC userinfo endpoint
@@ -117,25 +117,5 @@ continueNode.description     // Stage description string
 continueNode.pageFooter      // Page footer string
 continueNode.submitButtonText // Custom submit button label
 continueNode.callbacks       // List<Callback> - the callback instances for this node
-```
-
----
-
-## Imports Cheatsheet
-
-```kotlin
-import com.pingidentity.journey.Journey
-import com.pingidentity.journey.module.Oidc
-import com.pingidentity.journey.module.Session
-import com.pingidentity.journey.start
-import com.pingidentity.journey.user
-import com.pingidentity.journey.session
-import com.pingidentity.orchestrate.ContinueNode
-import com.pingidentity.orchestrate.SuccessNode
-import com.pingidentity.orchestrate.ErrorNode
-import com.pingidentity.orchestrate.FailureNode
-import com.pingidentity.orchestrate.Node
-import com.pingidentity.logger.Logger
-import com.pingidentity.logger.STANDARD
 ```
 

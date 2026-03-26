@@ -434,7 +434,7 @@ class MainActivity : ComponentActivity() {
 ```kotlin
 // Get access token
 val user = journey.user()
-val accessToken = user?.accessToken()
+val accessToken = user?.token()
 
 // Fetch user info (OIDC userinfo endpoint)
 val userinfo = user?.userinfo()
