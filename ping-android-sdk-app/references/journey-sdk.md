@@ -78,14 +78,31 @@ when (node) {
 ## User / Session Operations
 
 ```kotlin
+import com.pingidentity.utils.Result
+
 val user = journey.user()          // Returns User? — null if not authenticated
 
 // Token access
-val accessToken  = user?.token()
-val ssoToken     = user?.ssoToken()
+when (val result = user?.token()) {
+    is Result.Failure -> {
+    }
 
-// OIDC userinfo endpoint
-val claims = user?.userinfo()      // Returns Map<String, Any>
+    is Result.Success -> {
+        val accessToken = result.value.accessToken
+    }
+}
+
+val ssoToken     = user?.session()
+
+// Fetch user info (OIDC userinfo endpoint)
+when (val result = user.userinfo(false)) {
+    is Result.Failure -> {
+    }
+
+    is Result.Success -> {
+        val userInfo = result.value //JsonObject
+    }
+}      // Returns JsonObject
 
 // Revoke tokens (keeps SSO session)
 user?.revoke()
@@ -93,7 +110,6 @@ user?.revoke()
 // Full logout (clears SSO session + tokens)
 user?.logout()
 ```
-
 ---
 
 ## Node Types
@@ -117,5 +133,25 @@ continueNode.description     // Stage description string
 continueNode.pageFooter      // Page footer string
 continueNode.submitButtonText // Custom submit button label
 continueNode.callbacks       // List<Callback> - the callback instances for this node
+```
+
+---
+
+## Imports Cheatsheet
+
+```kotlin
+import com.pingidentity.journey.Journey
+import com.pingidentity.journey.module.Oidc
+import com.pingidentity.journey.module.Session
+import com.pingidentity.journey.start
+import com.pingidentity.journey.user
+import com.pingidentity.journey.session
+import com.pingidentity.orchestrate.ContinueNode
+import com.pingidentity.orchestrate.SuccessNode
+import com.pingidentity.orchestrate.ErrorNode
+import com.pingidentity.orchestrate.FailureNode
+import com.pingidentity.orchestrate.Node
+import com.pingidentity.logger.Logger
+import com.pingidentity.logger.STANDARD
 ```
 

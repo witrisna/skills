@@ -134,16 +134,16 @@ manifestPlaceholders["appRedirectUriScheme"] = "org.forgerock.demo"
 
 ### Parameters to collect
 
-| Parameter | Required | Default | Description |
-|---|---|---|---|
-| `serverUrl` | ✅ Yes | — | Base URL of the PingOne AIC tenant (e.g. `https://your-tenant.forgeblocks.com/am`) |
-| `realm` | No | `alpha` | Realm name inside the tenant |
-| `clientId` | ✅ Yes | — | OAuth2 Client ID registered in PingOne AIC for this Android app |
-| `discoveryEndpoint` | ✅ Yes | — | Full OIDC discovery endpoint URL (`.well-known/openid-configuration`) |
-| `scopes` | No | `openid email profile phone` | Space-separated OAuth2 scopes to request |
-| `redirectUri` | No | `org.forgerock.demo:/oauth2redirect` | OAuth2 redirect URI registered in PingOne AIC for the client |
-| `cookieName` | No | *(omitted)* | SSO cookie name for the realm; omit the `cookie` line if blank |
-| `journeyName` | No | `Login` | Name of the Journey/Tree to invoke on start |
+| Parameter           | Required | Default                              | Description                                                                        |
+|---------------------|----------|--------------------------------------|------------------------------------------------------------------------------------|
+| `serverUrl`         | ✅ Yes    | —                                    | Base URL of the PingOne AIC tenant (e.g. `https://your-tenant.forgeblocks.com/am`) |
+| `realm`             | Yes      | `alpha`                              | Realm name inside the tenant                                                       |
+| `clientId`          | ✅ Yes    | —                                    | OAuth2 Client ID registered in PingOne AIC for this Android app                    |
+| `discoveryEndpoint` | ✅ Yes    | —                                    | Full OIDC discovery endpoint URL (`.well-known/openid-configuration`)              |
+| `scopes`            | Yes      | `openid email profile phone`         | Space-separated OAuth2 scopes to request                                           |
+| `redirectUri`       | Yes      | `org.forgerock.demo:/oauth2redirect` | OAuth2 redirect URI registered in PingOne AIC for the client                       |
+| `cookieName`        | Yes      | `iplanetDirectoryPro`                  | SSO cookie name for the realm; omit the `cookie` line if blank                     |
+| `journeyName`       | No       | `Login`                              | Name of the Journey/Tree to invoke on start                                        |
 
 ### Suggested prompts
 
@@ -160,7 +160,7 @@ Before I generate the files, I need a few details about your PingOne AIC setup:
 4. 🏛️ Realm              — Which realm? (press Enter to use the default: alpha)
 5. 📋 Scopes              — Which OAuth2 scopes? (default: openid email profile phone)
 6. 🔀 Redirect URI        — What is the redirect URI? (default: org.forgerock.demo:/oauth2redirect)
-7. 🍪 Cookie name         — SSO cookie name? (leave blank to omit)
+7. 🍪 Cookie name         — SSO cookie name? (default: iplanetDirectoryPro)
 8. 🗺️ Journey name       — Which Journey/Tree to start? (default: Login)
 ```
 
@@ -170,6 +170,8 @@ Before I generate the files, I need a few details about your PingOne AIC setup:
 - `discoveryEndpoint` must end with `/.well-known/openid-configuration`.
 - `clientId` must be non-empty.
 - `redirectUri` must follow `<scheme>:/<path>` format; the scheme must match the
+- `cookieName` must be non-empty.
+- `scopes` must follow `<scheme>:/<path>` format; the scheme must match the
   `manifestPlaceholders["appRedirectUriScheme"]` value used in `build.gradle.kts`.
 - If `scopes` does not include `openid`, prepend it automatically and warn the user.
 - If `discoveryEndpoint` domain differs from `serverUrl` domain, warn the user but proceed.
@@ -196,7 +198,7 @@ val journey = Journey {
     module(Oidc) {
         clientId = "<clientId>"         // collected: clientId
         discoveryEndpoint = "<discoveryEndpoint>"  // collected: discoveryEndpoint
-        scopes = mutableSetOf(<scopes>) // collected: scopes — split by space, quote each token
+        scopes = mutableSetOf(< scopes >) // collected: scopes — split by space, quote each token
         redirectUri = "<redirectUri>"   // collected: redirectUri
     }
 }
@@ -432,12 +434,29 @@ class MainActivity : ComponentActivity() {
 ## Post-Authentication Operations
 
 ```kotlin
+
+import com.pingidentity.utils.Result
 // Get access token
 val user = journey.user()
-val accessToken = user?.token()
+
+when (val result = user?.token()) {
+    is Result.Failure -> {
+    }
+
+    is Result.Success -> {
+        val accessToken = result.value.accessToken
+    }
+}
 
 // Fetch user info (OIDC userinfo endpoint)
-val userinfo = user?.userinfo()
+when (val result = user.userinfo(false)) {
+    is Result.Failure -> {
+    }
+
+    is Result.Success -> {
+        val userInfo = result.value //JsonObject
+    }
+}
 
 // Revoke tokens
 user?.revoke()
